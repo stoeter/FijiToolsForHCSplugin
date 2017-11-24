@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+		http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>org.scijava</groupId>
+		<artifactId>pom-scijava</artifactId>
+		<version>13.0.0</version>
+		<relativePath />
+	</parent>
+
+	<groupId>de.mpicbg.tds</groupId>
+	<artifactId>FijiToolsForHCSplugin</artifactId>
+	<version>0.3-SNAPSHOT</version>
+
+	<name>FijiToolsForHCSplugin</name>
+	<description>Plugins and functions for Fiji-Tools-For-HCS</description>
+	<url>https://github.com/stoeter/FijiToolsForHCSplugin/wiki</url>
+	<inceptionYear>2017</inceptionYear>
+	<organization>
+		<name>MPI-CBG TDS</name>
+		<url>https://github.com/stoeter/FijiToolsForHCSplugin/wiki</url>
+	</organization>
+	<licenses>
+		<license>
+			<name>Simplified BSD License</name>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
+	<developers>
+		<!-- See https://imagej.net/Team -->
+		<developer>
+			<id>stoeter</id>
+			<name>Martin Stoeter</name>
+			<url>http://imagej.net/User:stoeter</url>
+			<roles>
+				<role>founder</role>
+				<role>lead</role>
+				<role>developer</role>
+				<role>debugger</role>
+				<role>reviewer</role>
+				<role>support</role>
+				<role>maintainer</role>
+			</roles>
+		</developer>
+	</developers>
+	<contributors>
+		<contributor>
+			<name>none</name>
+		</contributor>
+	</contributors>
+
+	<mailingLists>
+		<mailingList>
+			<name>ImageJ Forum</name>
+			<archive>http://forum.imagej.net/</archive>
+		</mailingList>
+	</mailingLists>
+
+	<scm>
+		<connection>scm:git:git://github.com/stoeter/FijiToolsForHCSplugin</connection>
+		<developerConnection>scm:git:git@github.com:stoeter/FijiToolsForHCSplugin</developerConnection>
+		<tag>HEAD</tag>
+		<url>https://github.com/stoeter/FijiToolsForHCSplugin</url>
+	</scm>
+	<issueManagement>
+		<system>GitHub Issues</system>
+		<url>https://github.com/stoeter/FijiToolsForHCSplugin/issues</url>
+	</issueManagement>
+	<ciManagement>
+		<system>None</system>
+	</ciManagement>
+
+	<properties>
+		<package-name>de.mpicbg.tds</package-name>
+		<main-class>de.mpicbg.tds.FijiToolsForHCSplugin</main-class>
+		<license.licenseName>bsd_2</license.licenseName>
+		<license.copyrightOwners>Martin Stoeter</license.copyrightOwners>
+		<imagej.app.directory>C:/Users/stoeter/AppData/Local/Programs/Fiji.app/</imagej.app.directory>
+	</properties>
+
+	<repositories>
+		<repository>
+			<id>imagej.public</id>
+			<url>http://maven.imagej.net/content/groups/public</url>
+		</repository>
+	</repositories>
+
+	<dependencies>
+		<dependency>
+			<groupId>net.imagej</groupId>
+			<artifactId>imagej</artifactId>
+		</dependency>
+	</dependencies>
+</project>
