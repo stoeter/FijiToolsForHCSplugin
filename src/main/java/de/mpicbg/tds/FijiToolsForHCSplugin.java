@@ -8,6 +8,7 @@
 
 package de.mpicbg.tds;
 
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -47,7 +48,8 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 	private ExtensionDescriptor[] extensions = {
 			ExtensionDescriptor.newDescriptor("getNumberToString", this, ARG_OUTPUT + ARG_NUMBER, ARG_NUMBER, ARG_NUMBER), 
 			ExtensionDescriptor.newDescriptor("saveLog", this, ARG_STRING), 
-			ExtensionDescriptor.newDescriptor("getRegexMatchesFromArray", this, ARG_ARRAY, ARG_STRING, ARG_OUTPUT + ARG_STRING), // oldName
+			ExtensionDescriptor.newDescriptor("getRegexMatchesFromArray", this, ARG_ARRAY, ARG_STRING, ARG_OUTPUT + ARG_STRING), 
+			ExtensionDescriptor.newDescriptor("getFileListAsString", this, ARG_OUTPUT + ARG_STRING), 
 			ExtensionDescriptor.newDescriptor("getMacroExtensionVersion", this),
 			ExtensionDescriptor.newDescriptor("getMacroExtensionNames", this),
 			ExtensionDescriptor.newDescriptor("testDoubleArray", this, ARG_OUTPUT + ARG_STRING, ARG_ARRAY), 
@@ -83,18 +85,29 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		} 
 		if (name.equals("getRegexMatchesFromArray")) {
 			String[] stringArrayForQuery = getStringArrayFromObject((Object[]) args[0]);
-			String regexPattern = (String) args[1]; 
-			String[] resultString = new String[1];                                                  // resultString contains all regex matches as concatenated String and is given back to IJ-macro a 1-element String[] array		
+			String regexPattern = (String) args[1];
+			String optionalPath = ((Object[]) args[2])[0].toString();   // because object element 3 is also OUTPUT, the Object is actually an array and must be cast first as Object, then as String
+
+			//IJ.log("IJ: path is:" + optionalPath); 
+			if (new File(optionalPath).isDirectory()) {
+				IJ.log("MacroExtensions: third parameter is an optional directory. Using optional path to list files and array (first parameter) will be ignored!");
+				stringArrayForQuery = getFileListHCS(optionalPath);
+			}
 			
-			//String[] stringArrayForQuery = {"171020-dyes-10x_G03_T0001F005L01A01Z01C01.tif","171020-dyes-10x_G04_T0001F004L01A01Z01C02.tif","171020-dyes-10x_H05_T0001F003L01A01Z01C04.tif"}; 
-			//String regexPattern = "(.*)_([A-P][0-9]{2})_(T[0-9]{4})(F[0-9]{3})(L[0-9]{2})(A[0-9]{2})(Z[0-9]{2})(C[0-9]{2}).tif$";
-			//regexPattern = "(?<barcode>.*)_(?<well>[A-P][0-9]{2})_(?<timePoint>T[0-9]{4})(?<field>F[0-9]{3})(?<timeLine>L[0-9]{2})(?<action>A[0-9]{2})(?<plane>Z[0-9]{2})(?<channel>C[0-9]{2}).tif$";
+			String[] resultString = new String[1];                                                  // resultString contains all regex matches as concatenated String and is given back to IJ-macro a 1-element String[] array		
 			
 			resultString[0] = getStringFromHashMap(getRegexHashMap(stringArrayForQuery, regexPattern), "||", "\t");     // here the HashSets are delimited by the first String parameter and the HashValues by the second
 			//IJ.log("IJ: End of code " + resultString[0]);                                                             // for debugging
 			
 			// return result as string array of length 1
 			args[2] = resultString;   
+		}
+		if (name.equals("getFileListAsString")) {
+			String path = ((Object[]) args[0])[0].toString();   // because object element 1 is also OUTPUT, the Object is actually an array and must be cast first as Object, then as String
+			
+			//((String[]) args[0])[0] = getStringFromArray(getFileListHCS(path), "\t");   // get the file list, then convert list to one single String and put back onto object
+			String[] stringArrayFromFunction = getFileListHCS(path); 
+			((String[]) args[0])[0] = getStringFromArray(stringArrayFromFunction, "\t");
 		}
 		if (name.equals("getMacroExtensionVersion")) {
 			IJ.log("MacroExtension Fiji-Tools-for-HCS-plugin version: " + FijiToolsForHCSplugin.class.getPackage().getImplementationVersion());
@@ -139,6 +152,8 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		} 
 		return null;
 	}
+
+//  =================================== F U N C T I O N S ===========================================
 	
 	//function returns a number in specific string format, e.g 2.5 => 02.500, example: myStringNumber = getNumberToString(2.5, 3, 6);
 	public static String getNumberToString(Double number , int decimalPlaces, int lengthNumberString) { 
@@ -194,6 +209,53 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		return uniqueRegexValues;
 	}
 
+	//function returns an array of file names found in the given parameter path
+	public static String[] getFileListHCS(String path) { // code was taken from here and adapted https://github.com/imagej/imagej1/blob/master/ij/macro/Functions.java
+		File f = new File(path);
+		// check if directory exists
+		if (!f.exists() || !f.isDirectory())
+			return new String[0];
+		//IJ.log("IJ: getting files now...");
+		// put all file name into an array
+		String[] list = f.list();
+		//IJ.log("IJ: getting files done...");
+		// check if any file was found and sort the file names
+		if (list == null)
+			return new String[0];
+		if (System.getProperty("os.name").indexOf("Linux")!=-1)
+			ij.util.StringSorter.sort(list);
+    	// get rid fo hidden and system files 
+		//IJ.log("IJ: checking hidden files..." + list.length);
+		File f2;
+    	int hidden = 0;
+    	for (int i=0; i<list.length; i++) {
+    		if (list[i].startsWith(".") || list[i].equals("Thumbs.db")) {
+    			list[i] = null;
+    			hidden++;
+    		} else {
+    			f2 = new File(path, list[i]);
+    			if (f2.isDirectory())
+    				list[i] = list[i] + "/";  // add file separator to list element if folder 
+    		}
+    	}
+    	int n = list.length-hidden;
+		if (n<=0)
+			return new String[0];
+		//IJ.log("IJ: reforming list now..." + n);
+    	if (hidden>0) {
+			String[] list2 = new String[n];
+			int j = 0;
+			for (int i=0; i<list.length; i++) {
+				if (list[i]!=null)
+					list2[j++] = list[i];
+			}
+			list = list2;
+		}
+		//IJ.log("IJ: done in funtion, to string now...");
+    	return list;  // return array of file names
+}
+	
+	
 //  =================================== H E L P E R  - F U N C T I O N S ===========================================
 	
 	// this function casts an object array (object[]) which is array from IJ-macro into a string array 
@@ -226,7 +288,8 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		} else {
 			stringContainingArray = "";               // array is empty => string is empty
 		}
-		for (int i = 1; i < stringArray.length; i++) {
+		for (int i = 1; i < stringArray.length; ++i) {
+			//if(i % 500 == 0) IJ.log("IJ: in function stringContainingArray " + i + " is long " + stringContainingArray.length() + " :" + stringContainingArray); 
 			stringContainingArray += delimiter + stringArray[i];
 			//IJ.log("IJ: in function stringContainingArray " + i + " is " + stringContainingArray); // for debugging
 		}
@@ -259,6 +322,14 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 			//IJ.log("IJ: pattern names are:" + m.group(1));  //for debugging
 			++i;
 		}
+		if (i == 1) {  // if no group names were found
+			Pattern rNoName = Pattern.compile("\\(([a-zA-Z0-9<> _#^@%~;'\"\\[\\]\\{\\,\\}\\.\\+\\?\\*\\|\\&\\!\\:\\=\\-]*)\\)");    // regex searching for pattern of regex matches without group names ("")
+			Matcher mNoName = rNoName.matcher(regexString);
+			while (mNoName.find()) {
+				namedGroups[i] = (String) mNoName.group(1);
+				++i;
+			}
+		}
 		// generate a new array of actually the size of the found group names, put all group names there (null is excluded) and use a as return string
 		String[] resizedNamedGroups = new String[i];
 		System.arraycopy(namedGroups, 0, resizedNamedGroups, 0, i);
@@ -288,11 +359,13 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		return resultString;
 	}
 
+//  ================================ E N D  o f  H E L P E R  - F U N C T I O N S =========================================
+	
 	@Override
 	public void run() {
 		// TODO Auto-generated method stub
 	    if (!IJ.macroRunning()) {
-	        IJ.error("Cannot install extensions from outside a macro!");
+	        IJ.error("Cannot install extensions from outside a macro!\n\nRun macro ...> Development > Macro_Test_MacroExtensions\n... and follow instructions!");
 	        return;
 	      }
 	 //   getExtensionFunctions(); 
@@ -326,8 +399,16 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 
             // invoke the plugin
             ij.command().run(FijiToolsForHCSplugin.class, true);
-        }
-        */
+        }*/
+    	
+/*    	String[] stringArrayForQuery = {"171020-dyes-10x_G03_T0001F005L01A01Z01C01.tif","171020-dyes-10x_G04_T0001F004L01A01Z01C02.tif","171020-dyes-10x_H05_T0001F003L01A01Z01C04.tif"}; 
+		String regexPattern = "(.*)_([A-P][0-9]{2})_(T[0-9]{4})(F[0-9]{3})(L[0-9]{2})(A[0-9]{2})(Z[0-9]{2})(C[0-9]{2}).tif$";
+		//regexPattern = "(?<barcode>.*)_(?<well>[A-P][0-9]{2})_(?<timePoint>T[0-9]{4})(?<field>F[0-9]{3})(?<timeLine>L[0-9]{2})(?<action>A[0-9]{2})(?<plane>Z[0-9]{2})(?<channel>C[0-9]{2}).tif$";
+		String[] resultString = new String[1];
+		LinkedHashMap myRegexHashMap = getRegexHashMap(stringArrayForQuery, regexPattern);
+		IJ.log("IJ: hash map ok");
+		resultString[0] = getStringFromHashMap(myRegexHashMap, "||", "\t");     // here the HashSets are delimited by the first String parameter and the HashValues by the second
+		IJ.log("IJ:" + resultString[0]);*/
     }
 
 }
