@@ -16,6 +16,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.Map;
 import java.util.Properties;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -25,9 +26,11 @@ import org.scijava.command.Command;
 import org.scijava.plugin.Plugin;
 
 import ij.IJ;
+import ij.ImagePlus;
 import ij.macro.ExtensionDescriptor;
 import ij.macro.Functions;
 import ij.macro.MacroExtension;
+import ij.WindowManager;
 import net.imagej.ImageJ;
 
 
@@ -48,7 +51,8 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 	private ExtensionDescriptor[] extensions = {
 			ExtensionDescriptor.newDescriptor("getNumberToString", this, ARG_OUTPUT + ARG_NUMBER, ARG_NUMBER, ARG_NUMBER), 
 			ExtensionDescriptor.newDescriptor("saveLog", this, ARG_STRING), 
-			ExtensionDescriptor.newDescriptor("getRegexMatchesFromArray", this, ARG_ARRAY, ARG_STRING, ARG_OUTPUT + ARG_STRING), 
+			ExtensionDescriptor.newDescriptor("getRegexMatchesFromArray", this, ARG_ARRAY, ARG_STRING, ARG_OUTPUT + ARG_STRING),
+			ExtensionDescriptor.newDescriptor("getFilteredList", this, ARG_ARRAY, ARG_STRING, ARG_STRING, ARG_OUTPUT + ARG_STRING),
 			ExtensionDescriptor.newDescriptor("getFileListAsString", this, ARG_OUTPUT + ARG_STRING), 
 			ExtensionDescriptor.newDescriptor("getMacroExtensionVersion", this),
 			ExtensionDescriptor.newDescriptor("getMacroExtensionNames", this),
@@ -102,6 +106,38 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 			// return result as string array of length 1
 			args[2] = resultString;   
 		}
+		if (name.equals("getFilteredList")) {
+			String[] stringArray = getStringArrayFromObject((Object[]) args[0]);
+			String filterString = (String) args[1];
+			String displayList = (String) args[2];                          // from IJ type boolean is handed over, here it is interpreted as String! (true = "1", false = "0")
+			String optionalSettings = ((Object[]) args[3])[0].toString();   // because object element 4 is also OUTPUT, the Object is actually an array and must be cast first as Object, then as String
+
+			//IJ.log("IJ: option settings is:" + optionalSettings); 
+			
+			String resultString = "";                           // resultString contains all items of the input list that were found to contain the filter string as concatenated String and is given back to IJ-macro a 1-element String[] array		
+			String delimiter = "\t";
+			int counter = 0;
+			//IJ.log("IJ: End of code " + resultString[0]);                  // for debugging
+			
+			if(filterString.length() > 0) {
+				for (int i = 0; i < stringArray.length; ++i) {
+					if (stringArray[i].contains(filterString)) {
+						resultString +=  stringArray[i] + delimiter;
+						++counter;
+					}
+				}
+				if (resultString.length() > 0) resultString.substring(0, resultString.length()-1);   // remove last delimiter at the end
+			} else {
+				resultString = getStringFromArray(stringArray, delimiter);
+			}
+		   
+			IJ.log(counter + " file(s) found after filtering: " + filterString); 
+			// if (displayList.contains("true")) {array.show("List after filtering for " + filterStringFunction, returnedFileList);}
+
+			// return result as string array of length 1
+			((String[]) args[3])[0] = resultString;   
+		}
+
 		if (name.equals("getFileListAsString")) {
 			String path = ((Object[]) args[0])[0].toString();   // because object element 1 is also OUTPUT, the Object is actually an array and must be cast first as Object, then as String
 			
@@ -165,13 +201,23 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 	}  
 
 	//function saves the log window of ImageJ @ the given path, example: saveLog("C:\\Temp\\Log_temp.txt");
-	public static void saveLogFunction(String logPath) { 
+	public static void saveLogFunction(String logPath) {
+		String imageTitle = new String();
+		
+		if (WindowManager.getImageCount() > 0) {
+			final ImagePlus image = IJ.getImage();  // gets ImagePlus of top-most window
+			imageTitle = image.getTitle();
+		}
+		//IJ.log("IJ: image title is " + imageTitle);
+
 		try (FileWriter out = new FileWriter (logPath)) {
-			IJ.saveAs("Text", logPath + "2"); //save Log window
+			IJ.selectWindow("Log");
+			IJ.saveAs("Text", logPath); //save Log window
 		} catch  (IOException e) {
 			IJ.log("IJ: couldnot save log file: " + logPath);
 			e.printStackTrace();
 		}
+		if (WindowManager.getImageCount() > 0) IJ.selectWindow(imageTitle);
 	}
 	
 	// this function finds all unique matches from a group-named regex applied on an array of strings[] (e.g. file names) and gives back a LinkedHashMap, where the keys are the group names of the regex and the values are HashSets containing the unique values found for the group  
@@ -359,6 +405,71 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		return resultString;
 	}
 
+	// this function transforms all content of a LinkedHashMap into a single string by concatenating first all the keys and then all the values (HashSets themselves will be concatenated into String) 
+	/*private static String showArrayFunction(String[] stringArray) {
+
+		int maxLength = 0;
+		String title = "Arrays";
+		ArrayList arrays = new ArrayList();
+		ArrayList names = new ArrayList();
+		interp.getLeftParen();
+		do {
+			if (isStringArg() && !isArrayArg())
+				title = getString();
+			else {
+				int symbolTableAddress = pgm.code[interp.pc+1]>>TOK_SHIFT;
+				names.add(pgm.table[symbolTableAddress].str);
+				Variable[] a = getArray();
+				arrays.add(a);
+				if (a.length>maxLength)
+					maxLength = a.length;
+			}
+			interp.getToken();
+		} while (interp.token==',');
+		if (interp.token!=')')
+			interp.error("')' expected");
+		int n = arrays.size();
+		if (n==1) {
+			if (title.equals("Arrays"))
+				title = (String)names.get(0);
+			names.set(0, "Value");
+		}
+		ResultsTable rt = new ResultsTable();
+		//rt.setPrecision(Analyzer.getPrecision());
+		boolean showRowNumbers = false;
+		int openParenIndex = title.indexOf("(");
+		if (openParenIndex>=0) {
+			String options = title.substring(openParenIndex, title.length());
+			title = title.substring(0, openParenIndex);
+			title = title.trim();
+			showRowNumbers = options.contains("row") || options.contains("1");
+			if (!showRowNumbers && options.contains("index")) {
+				for (int i=0; i<maxLength; i++)
+					rt.setValue("Index", i, ""+i);
+			}
+		}
+		if (!showRowNumbers)
+			rt.showRowNumbers(false);
+		for (int arr=0; arr<n; arr++) {
+			Variable[] a = (Variable[])arrays.get(arr);
+			String heading = (String)names.get(arr);
+			for (int i=0; i<maxLength; i++) {
+				if (i>=a.length) {
+					rt.setValue(heading, i, "");
+					continue;
+				}
+				String s = a[i].getString();
+				if (s!=null)
+					rt.setValue(heading, i, s);
+				else
+					rt.setValue(heading, i, a[i].getValue());
+			}
+		}
+     	rt.show(title);
+		return null;
+}*/
+	
+	
 //  ================================ E N D  o f  H E L P E R  - F U N C T I O N S =========================================
 	
 	@Override
