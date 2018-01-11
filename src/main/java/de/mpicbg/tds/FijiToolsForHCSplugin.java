@@ -11,27 +11,29 @@ package de.mpicbg.tds;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
+//import java.io.InputStream;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.Map;
-import java.util.Properties;
+//import java.util.Properties;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 
-
 import org.scijava.command.Command;
 import org.scijava.plugin.Plugin;
+//import org.scijava.util.ArrayUtils;
 
 import ij.IJ;
 import ij.ImagePlus;
 import ij.macro.ExtensionDescriptor;
 import ij.macro.Functions;
 import ij.macro.MacroExtension;
+import ij.measure.ResultsTable;
 import ij.WindowManager;
-import net.imagej.ImageJ;
+//import net.imagej.ImageJ;
+
 
 
 
@@ -111,28 +113,24 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 			String filterString = (String) args[1];
 			String displayList = (String) args[2];                          // from IJ type boolean is handed over, here it is interpreted as String! (true = "1", false = "0")
 			String optionalSettings = ((Object[]) args[3])[0].toString();   // because object element 4 is also OUTPUT, the Object is actually an array and must be cast first as Object, then as String
-
 			//IJ.log("IJ: option settings is:" + optionalSettings); 
 			
-			String resultString = "";                           // resultString contains all items of the input list that were found to contain the filter string as concatenated String and is given back to IJ-macro a 1-element String[] array		
-			String delimiter = "\t";
-			int counter = 0;
+			ArrayList<String> tempArray = new ArrayList<>();            // array contain in the filtered strings
+			String resultString = "";                                   // resultString contains all items of the input list that were found to contain the filter string as concatenated String and is given back to IJ-macro a 1-element String[] array		
 			//IJ.log("IJ: End of code " + resultString[0]);                  // for debugging
-			
-			if(filterString.length() > 0) {
-				for (int i = 0; i < stringArray.length; ++i) {
-					if (stringArray[i].contains(filterString)) {
-						resultString +=  stringArray[i] + delimiter;
-						++counter;
-					}
+		
+			for (int i = 0; i < stringArray.length; ++i) {
+				if (stringArray[i].contains(filterString)) {          // check it filter string is in string array
+					tempArray.add(stringArray[i]);
 				}
-				if (resultString.length() > 0) resultString.substring(0, resultString.length()-1);   // remove last delimiter at the end
-			} else {
-				resultString = getStringFromArray(stringArray, delimiter);
 			}
-		   
-			IJ.log(counter + " file(s) found after filtering: " + filterString); 
-			// if (displayList.contains("true")) {array.show("List after filtering for " + filterStringFunction, returnedFileList);}
+			// put arraylist to array (for window showing and for making resultstring to be given back to IJ)
+			String[] resultArray = new String[tempArray.size()];
+			tempArray.toArray(resultArray);
+			resultString = getStringFromArray(resultArray, "\t"); 
+
+			IJ.log(tempArray.size() + " file(s) found after filtering: " + filterString); 
+			if (displayList.contains("1") && tempArray.size() > 0) showArray("List after filtering for " + filterString, resultArray);
 
 			// return result as string array of length 1
 			((String[]) args[3])[0] = resultString;   
@@ -199,7 +197,7 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		//IJ.log("IJ: final string number in method " + numberString);                                                // for debugging
 		return numberString;
 	}  
-
+	
 	//function saves the log window of ImageJ @ the given path, example: saveLog("C:\\Temp\\Log_temp.txt");
 	public static void saveLogFunction(String logPath) {
 		String imageTitle = new String();
@@ -404,44 +402,28 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		}
 		return resultString;
 	}
+	
+	// this function taken from the link below (IJ-Build-in functions) and rewritten to work here as a function accepting window tile and array as paramerter (original show do multiple arrays)  
+	// https://github.com/imagej/ImageJA/blob/553292f05b2337a0352a3277249c24ef39c271f9/src/main/java/ij/macro/Functions.java#L5762
+	private static void showArray(String windowTitle, Object[] objectArrayTemp) {
 
-	// this function transforms all content of a LinkedHashMap into a single string by concatenating first all the keys and then all the values (HashSets themselves will be concatenated into String) 
-	/*private static String showArrayFunction(String[] stringArray) {
+		Object[] objectArray = new Object[1];
+		objectArray[0] = objectArrayTemp;
 
-		int maxLength = 0;
-		String title = "Arrays";
-		ArrayList arrays = new ArrayList();
-		ArrayList names = new ArrayList();
-		interp.getLeftParen();
-		do {
-			if (isStringArg() && !isArrayArg())
-				title = getString();
-			else {
-				int symbolTableAddress = pgm.code[interp.pc+1]>>TOK_SHIFT;
-				names.add(pgm.table[symbolTableAddress].str);
-				Variable[] a = getArray();
-				arrays.add(a);
-				if (a.length>maxLength)
-					maxLength = a.length;
-			}
-			interp.getToken();
-		} while (interp.token==',');
-		if (interp.token!=')')
-			interp.error("')' expected");
-		int n = arrays.size();
-		if (n==1) {
-			if (title.equals("Arrays"))
-				title = (String)names.get(0);
-			names.set(0, "Value");
-		}
+		String arrayType = ((Object[]) objectArray[0])[0].getClass().getName();
+		int maxLength = ((Object[]) ((Object[]) objectArray[0])).length;
+		String columnHeader = "Value";
+		int n = objectArray.length;
+
 		ResultsTable rt = new ResultsTable();
 		//rt.setPrecision(Analyzer.getPrecision());
+		// make row numbering available if in window title the term "row" or "1" is present
 		boolean showRowNumbers = false;
-		int openParenIndex = title.indexOf("(");
+		int openParenIndex = windowTitle.indexOf("(");
 		if (openParenIndex>=0) {
-			String options = title.substring(openParenIndex, title.length());
-			title = title.substring(0, openParenIndex);
-			title = title.trim();
+			String options = windowTitle.substring(openParenIndex, windowTitle.length());
+			windowTitle = windowTitle.substring(0, openParenIndex);
+			windowTitle = windowTitle.trim();
 			showRowNumbers = options.contains("row") || options.contains("1");
 			if (!showRowNumbers && options.contains("index")) {
 				for (int i=0; i<maxLength; i++)
@@ -450,25 +432,23 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		}
 		if (!showRowNumbers)
 			rt.showRowNumbers(false);
+		// now write the array to the window
 		for (int arr=0; arr<n; arr++) {
-			Variable[] a = (Variable[])arrays.get(arr);
-			String heading = (String)names.get(arr);
+			Object[] a = (Object[]) objectArray[arr];
 			for (int i=0; i<maxLength; i++) {
+				//IJ.log("IJ: arrays printing for... " + columnHeader + " -> " + i);
 				if (i>=a.length) {
-					rt.setValue(heading, i, "");
+					rt.setValue(columnHeader, i, "");
 					continue;
 				}
-				String s = a[i].getString();
-				if (s!=null)
-					rt.setValue(heading, i, s);
-				else
-					rt.setValue(heading, i, a[i].getValue());
+				if (arrayType == "java.lang.String") 
+					rt.setValue(columnHeader, i, ((Object[]) objectArray[arr])[i].toString());
+				else 
+					rt.setValue(columnHeader, i, (Double) ((Object[]) objectArray[arr])[i]); 
 			}
 		}
-     	rt.show(title);
-		return null;
-}*/
-	
+     	rt.show(windowTitle);
+}
 	
 //  ================================ E N D  o f  H E L P E R  - F U N C T I O N S =========================================
 	
@@ -483,6 +463,7 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 	    
 	   Functions.registerExtensions(this);
 	   //IJ.log("IJ: registerExtensions done");
+	   
 	}
 	
     /**
@@ -512,6 +493,14 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
             ij.command().run(FijiToolsForHCSplugin.class, true);
         }*/
     	
+ /*	   String[] myArray1 = {"A","B","C"}; 
+ 	   String[] myArray2 = {"1","2","3"};
+ 	   Double[] myArray3 = {1.0,2.0,3.0};
+ 	   System.out.println("main is running...");
+ 	   showArray("some letters (1-10)", myArray1);
+	   showArray("some numbers (rows)", myArray3);
+	   showArray("Arrays", myArray2);
+*/    	
 /*    	String[] stringArrayForQuery = {"171020-dyes-10x_G03_T0001F005L01A01Z01C01.tif","171020-dyes-10x_G04_T0001F004L01A01Z01C02.tif","171020-dyes-10x_H05_T0001F003L01A01Z01C04.tif"}; 
 		String regexPattern = "(.*)_([A-P][0-9]{2})_(T[0-9]{4})(F[0-9]{3})(L[0-9]{2})(A[0-9]{2})(Z[0-9]{2})(C[0-9]{2}).tif$";
 		//regexPattern = "(?<barcode>.*)_(?<well>[A-P][0-9]{2})_(?<timePoint>T[0-9]{4})(?<field>F[0-9]{3})(?<timeLine>L[0-9]{2})(?<action>A[0-9]{2})(?<plane>Z[0-9]{2})(?<channel>C[0-9]{2}).tif$";

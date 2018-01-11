@@ -14,7 +14,7 @@
 
 	<groupId>de.mpicbg.tds</groupId>
 	<artifactId>FijiToolsForHCSplugin</artifactId>
-	<version>0.3.3</version>
+	<version>0.4.0</version>
 
 	<name>FijiToolsForHCSplugin</name>
 	<description>Plugins and functions for Fiji-Tools-For-HCS</description>
