@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 
 import org.scijava.command.Command;
 import org.scijava.plugin.Plugin;
@@ -55,7 +56,8 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 			ExtensionDescriptor.newDescriptor("saveLog", this, ARG_STRING), 
 			ExtensionDescriptor.newDescriptor("getRegexMatchesFromArray", this, ARG_ARRAY, ARG_STRING, ARG_OUTPUT + ARG_STRING),
 			ExtensionDescriptor.newDescriptor("getFilteredList", this, ARG_ARRAY, ARG_STRING, ARG_STRING, ARG_OUTPUT + ARG_STRING),
-			ExtensionDescriptor.newDescriptor("getFileListAsString", this, ARG_OUTPUT + ARG_STRING), 
+			ExtensionDescriptor.newDescriptor("getFilteredListMultiple", this, ARG_ARRAY, ARG_ARRAY, ARG_OUTPUT + ARG_STRING, ARG_STRING),
+			ExtensionDescriptor.newDescriptor("getFileListSubfolder", this, ARG_STRING, ARG_OUTPUT + ARG_STRING), 
 			ExtensionDescriptor.newDescriptor("getMacroExtensionVersion", this),
 			ExtensionDescriptor.newDescriptor("getMacroExtensionNames", this),
 			ExtensionDescriptor.newDescriptor("testDoubleArray", this, ARG_OUTPUT + ARG_STRING, ARG_ARRAY), 
@@ -84,20 +86,23 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 			String[] returnStringArray = {newNumber};
 			args[0] = returnStringArray;   // String[] args[0] = newNumber; doesnt work because Double <-> String entire 1 dim array must be replaced 		
 		} 
+		
 		if (name.equals("saveLog")) {
 			String logPath = (String) args[0];  // since this is first argument (or/and output argument) this is an array (array of length 1 by definition => see documentation)
 
 			saveLogFunction(logPath);
 		} 
+		
 		if (name.equals("getRegexMatchesFromArray")) {
 			String[] stringArrayForQuery = getStringArrayFromObject((Object[]) args[0]);
 			String regexPattern = (String) args[1];
 			String optionalPath = ((Object[]) args[2])[0].toString();   // because object element 3 is also OUTPUT, the Object is actually an array and must be cast first as Object, then as String
 
 			//IJ.log("IJ: path is:" + optionalPath); 
-			if (new File(optionalPath).isDirectory()) {
+			boolean useOptionalPath = new File(optionalPath).isDirectory();
+			if (useOptionalPath) {
 				IJ.log("MacroExtensions: third parameter is an optional directory. Using optional path to list files and array (first parameter) will be ignored!");
-				stringArrayForQuery = getFileListHCS(optionalPath);
+				stringArrayForQuery = getFileListSubfolder(optionalPath);
 			}
 			
 			String[] resultString = new String[1];                                                  // resultString contains all regex matches as concatenated String and is given back to IJ-macro a 1-element String[] array		
@@ -106,8 +111,9 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 			//IJ.log("IJ: End of code " + resultString[0]);                                                             // for debugging
 			
 			// return result as string array of length 1
-			args[2] = resultString;   
+			args[2] = resultString;
 		}
+		
 		if (name.equals("getFilteredList")) {
 			String[] stringArray = getStringArrayFromObject((Object[]) args[0]);
 			String filterString = (String) args[1];
@@ -129,19 +135,39 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 			tempArray.toArray(resultArray);
 			resultString = getStringFromArray(resultArray, "\t"); 
 
-			IJ.log(tempArray.size() + " file(s) found after filtering: " + filterString); 
-			if (displayList.contains("1") && tempArray.size() > 0) showArray("List after filtering for " + filterString, resultArray);
+			IJ.log(tempArray.size() + " item(s) found after filtering: " + filterString); 
+			if ((displayList.contains("display") || displayList.contains("1"))  && tempArray.size() > 0) 
+				showArray("List after filtering for " + filterString, resultArray);
 
 			// return result as string array of length 1
 			((String[]) args[3])[0] = resultString;   
 		}
+		
+		if (name.equals("getFilteredListMultiple")) {
+			String[] stringArray = getStringArrayFromObject((Object[]) args[0]);     // string array to be filtered
+			String[] filterSettings = getStringArrayFromObject((Object[]) args[1]);  // array containing the settings for filtering see below for explanation
+			String optionalSettings = ((Object[]) args[2])[0].toString();            // because object element 3 is also OUTPUT, the Object is actually an array and must be cast first as Object, then as String
+			String displayList = (String) args[3];                          // from IJ type boolean is handed over, here it is interpreted as String! (true = "1", false = "0")
+			//IJ.log("IJ: option settings is:" + optionalSettings + " " + displayList); 
 
-		if (name.equals("getFileListAsString")) {
-			String path = ((Object[]) args[0])[0].toString();   // because object element 1 is also OUTPUT, the Object is actually an array and must be cast first as Object, then as String
-			
+			// return result as string array of length 1; getFilteredListMultiple returns ArrayList of filtered values
+			((String[]) args[2])[0] = getStringFromList(getFilteredListMultiple(stringArray, filterSettings, optionalSettings, displayList), "\t"); 
+		}
+
+		if (name.equals("getFileListSubfolder")) {
+			String path = (String) args[0];        // because object element 1 is also OUTPUT, the Object is actually an array and must be cast first as Object, then as String
+			String displayList = ((Object[]) args[1])[0].toString();   // this option setting is for recursive file lists (also in subfolders) 
+
 			//((String[]) args[0])[0] = getStringFromArray(getFileListHCS(path), "\t");   // get the file list, then convert list to one single String and put back onto object
-			String[] stringArrayFromFunction = getFileListHCS(path); 
-			((String[]) args[0])[0] = getStringFromArray(stringArrayFromFunction, "\t");
+			String[] stringArrayFromFunction = getFileListSubfolder(path); 
+			if (System.getProperty("os.name").indexOf("Linux")!=-1)
+				ij.util.StringSorter.sort(stringArrayFromFunction);
+
+			IJ.log(stringArrayFromFunction.length + " files found in selected folder and subfolders.");
+			if ((displayList.contains("display") || displayList.contains("1")) && stringArrayFromFunction.length > 0) 
+				showArray("All files - all", stringArrayFromFunction);
+
+			((String[]) args[1])[0] = getStringFromArray(stringArrayFromFunction, "\t");
 		}
 		if (name.equals("getMacroExtensionVersion")) {
 			IJ.log("MacroExtension Fiji-Tools-for-HCS-plugin version: " + FijiToolsForHCSplugin.class.getPackage().getImplementationVersion());
@@ -161,7 +187,7 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 			// cast has to be done element-by=element and code above is wrapped into this 'get'-function
 			String[] stringArrayFromFunction = getStringArrayFromObject((Object[]) args[1]); 
 			IJ.log("IJ: stringArrayFromFunction:  " + stringArrayFromFunction[0]);	
-			
+
 			// array cannot be passed back, therefore all array values have to be concatenated into one string and are passed back as first args element
 			((String[]) args[0])[0] = getStringFromArray(stringArrayFromFunction, "\t");  
 		}
@@ -170,11 +196,11 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 			IJ.log("IJ: before cast ARRAY: " + ((Object[]) args[1])[0].toString());
 			//IJ.log("IJ: object is " + args.length + " " + args[0].getClass().getName());
 			//IJ.log("IJ: object is " + args.length + " " + args[1].getClass().getName());
-			
+
 			// cast has to be done element-by=element and this is wrapped into this 'get'-function
 			Double[] doubleArrayFromFunction = getDoubleArrayFromObject((Object[]) args[1]); 
 			IJ.log("IJ: doubleArrayFromFunction:  " + doubleArrayFromFunction[0]);	
-			
+
 			// turn double values into string values 
 			String[] doubleArrayAsString = new String[doubleArrayFromFunction.length];
 			for (int i = 0; i < doubleArrayFromFunction.length; i++) {
@@ -253,50 +279,58 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		return uniqueRegexValues;
 	}
 
-	//function returns an array of file names found in the given parameter path
-	public static String[] getFileListHCS(String path) { // code was taken from here and adapted https://github.com/imagej/imagej1/blob/master/ij/macro/Functions.java
+	//function returns an array of paths from files found in the given parameter path and its subfolder (recursive)
+	public static String[] getFileListSubfolder(String path) { // code was taken from here and adapted https://github.com/imagej/imagej1/blob/master/ij/macro/Functions.java
 		File f = new File(path);
 		// check if directory exists
 		if (!f.exists() || !f.isDirectory())
 			return new String[0];
-		//IJ.log("IJ: getting files now...");
 		// put all file name into an array
-		String[] list = f.list();
-		//IJ.log("IJ: getting files done...");
-		// check if any file was found and sort the file names
-		if (list == null)
+		ArrayList<String> list = new ArrayList<String>(Arrays.asList((f.list())));         // array list contain in the filtered strings
+		// check if any file was found
+		if (list.size() == 0)
 			return new String[0];
-		if (System.getProperty("os.name").indexOf("Linux")!=-1)
-			ij.util.StringSorter.sort(list);
-    	// get rid fo hidden and system files 
-		//IJ.log("IJ: checking hidden files..." + list.length);
+		
+		// get rid to hidden and system files 
 		File f2;
-    	int hidden = 0;
-    	for (int i=0; i<list.length; i++) {
-    		if (list[i].startsWith(".") || list[i].equals("Thumbs.db")) {
-    			list[i] = null;
+    	int hidden = 0;                                // counter for ignored listed files (kick out: hidden, system files, directories)
+    	String currentPath = path;
+    	int staticListSize = list.size();              // the size of the list in increasing when file in subfolders are found, therefore staticListSize is fixed value before going in to for loop
+
+    	for (int i=0; i < staticListSize; i++) {
+    		if (list.get(i).startsWith(".") || list.get(i).equals("Thumbs.db")) {
+    			list.set(i, null);
     			hidden++;
     		} else {
-    			f2 = new File(path, list[i]);
-    			if (f2.isDirectory())
-    				list[i] = list[i] + "/";  // add file separator to list element if folder 
+    			f2 = new File(path, list.get(i));
+    			if (f2.isDirectory()) {
+    				list.set(i, list.get(i) + File.separator);                                      // add file separator to list element if folder 
+    		    	String[] subFolderFileList = getFileListSubfolder(currentPath + list.get(i));   // now go in subfolder and find files there (-> recursive)
+    		    	list.set(i, null);                                                              // kick out directory from file list
+    		    	hidden++;
+    		    	// now add subfolder list to global list
+    		    	for (int subFolderIndex = 0; subFolderIndex < subFolderFileList.length; ++subFolderIndex) 
+    		    		list.add(subFolderFileList[subFolderIndex]); 
+    			} else 
+    				list.set(i, currentPath + list.get(i)); 
+    			//System.out.println(i + " - " + list.get(i));
     		}
     	}
-    	int n = list.length-hidden;
+    	int n = list.size()-hidden;
 		if (n<=0)
 			return new String[0];
-		//IJ.log("IJ: reforming list now..." + n);
-    	if (hidden>0) {
-			String[] list2 = new String[n];
+		// reforming list now... kick out hidden
+		String[] list2 = new String[n];
+			if (hidden>0) {
 			int j = 0;
-			for (int i=0; i<list.length; i++) {
-				if (list[i]!=null)
-					list2[j++] = list[i];
+			for (int i=0; i<list.size(); i++) {
+				if (list.get(i)!=null)
+					list2[j++] = list.get(i);
 			}
-			list = list2;
-		}
-		//IJ.log("IJ: done in funtion, to string now...");
-    	return list;  // return array of file names
+		} else 
+			 list.toArray(list2);
+
+    	return list2;  // return array of file names
 }
 	
 	
@@ -340,7 +374,7 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		return stringContainingArray;
 	} 
 	
-/*	// this function casts ArrayList into Array and calls the getStringFromArray function
+	// this function casts ArrayList into Array and calls the getStringFromArray function
 	private static String getStringFromArrayList(ArrayList stringArrayList, String delimiter) { 
 		String[] stringArray = new String[stringArrayList.size()];
 		stringArray = (String[]) stringArrayList.toArray();
@@ -353,7 +387,7 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		stringArray = (String[]) stringList.toArray(stringArray);
 		return getStringFromArray(stringArray, delimiter);
 	} 
-*/	
+	
 	// this function analyses a regular expression with named groups (e.g. (?<myName>[a-Z]*)) and gives back an array of the names of the groups
 	private static String[] getNamedGroupCandidates(String regexString) {
 		String[] namedGroups = new String[100];                                // array big enough to handle up to 100 regex 
@@ -403,13 +437,66 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
 		return resultString;
 	}
 	
-	// this function taken from the link below (IJ-Build-in functions) and rewritten to work here as a function accepting window tile and array as paramerter (original show do multiple arrays)  
+	// this function filters a string array by using filter settings stored as an array; multiple string filters can be applied and subsequent and additional filtering is possible 
+	private static ArrayList<String> getFilteredListMultiple(String[] stringArray, String[] filterSettings, String optionalSettings, String displayList) {
+	
+		ArrayList<String> returnedFileList = new ArrayList<String>();                          //this list stores all strings that have passed the filter criteria is returned at the end of the function as array
+		ArrayList<String> currentStringArray = new ArrayList<String>(Arrays.asList(stringArray));
+		int skippedFilter = 0;                // in case all the filters are "no filtering"
+		int numberOfFilterSets = 0;
+		// try interpreting the filter setting array: it must be made up by three blocks -> filterStrings, availableFilterTerms, (selected) filterTerms
+		if (filterSettings.length % 3 == 0) 
+			numberOfFilterSets = filterSettings.length / 3;    // standard filter settings is Array.concat(filterStrings = newArray("","",""), availableFilterTerms = newArray("no filtering", "include", "exclude"), filterTerms = newArray("no filtering", "no filtering", "no filtering"));
+		else {
+			IJ.log("IJ: cannot interpret filter settings: ");   // if filter settings cannot be interpreted
+			for (int i = 0; i < filterSettings.length; i++) IJ.log("Filter setting " + i + ": " + filterSettings[i]);
+			return null;
+		} 
+
+		//for (int i = 0; i < filterSettings.length; i++) IJ.log(i + filterSettings[i]);
+		for (int i = 0; i < numberOfFilterSets; i++) {
+			//IJ.log("filter: " + filterSettings[(numberOfFilterSets - 1) * 3 + i] + " text " + filterSettings[i] + "."); 	IJ.log(i + " - " + filterSettings[(numberOfFilterSets - 1) * 3 + i]);	IJ.log(i + " - " + currentStringArray.size() + " - " + returnedFileList.size());
+			switch (filterSettings[(numberOfFilterSets - 1) * 3 + i]) {
+			case "include":                                     // is filterSettings[i * 3 + 1]
+				for (int j = 0; j < currentStringArray.size(); j++) {
+					if (currentStringArray.get(j).contains(filterSettings[i])) returnedFileList.add(currentStringArray.get(j));
+					//IJ.log("in for: " + currentStringArray.get(j) + (filterSettings[i]) + currentStringArray.get(j).contains(filterSettings[i]) + returnedFileList.size());
+				}
+				break;
+			case "exclude":
+				for (int j = 0; j < currentStringArray.size(); j++)
+					if (!currentStringArray.get(j).contains(filterSettings[i])) returnedFileList.add(currentStringArray.get(j));
+				break;
+			case "no filtering":
+				skippedFilter++;
+				break;
+			}
+			
+			IJ.log(returnedFileList.size() + " file(s) found after filter: " + filterSettings[(numberOfFilterSets - 1) * 3 + i] + " text " + filterSettings[i] + "."); 
+			//IJ.log("showing..." + returnedFileList.toArray().length + returnedFileList.toArray().getClass().getName());
+			if ((displayList.equals("display") || displayList.equals("1")) && returnedFileList.size() > 0)
+				showArray("List of files - after filtering for " + filterSettings[(numberOfFilterSets - 1) * 3 + i] + " " + filterSettings[i], returnedFileList.toArray());
+
+			//see description above! default: filterOnInputList = false
+			//IJ.log(currentStringArray.size() + " - " + returnedFileList.size()); 
+			if (!((optionalSettings.equals("additional") || optionalSettings.equals("1")) && !optionalSettings.equals("subsequent") && optionalSettings.equals("0"))) {
+				currentStringArray = (ArrayList<String>) returnedFileList.clone(); 
+				returnedFileList.clear();
+			}
+		}	
+
+		if (skippedFilter == numberOfFilterSets) returnedFileList = (ArrayList<String>) Arrays.asList(stringArray);	//if no filter condition is selected
+
+		return returnedFileList;
+	}
+	
+	// this function taken from the link below (IJ-Build-in functions) and rewritten to work here as a function accepting window tile and array as parameter (original show do multiple arrays)  
 	// https://github.com/imagej/ImageJA/blob/553292f05b2337a0352a3277249c24ef39c271f9/src/main/java/ij/macro/Functions.java#L5762
 	private static void showArray(String windowTitle, Object[] objectArrayTemp) {
 
 		Object[] objectArray = new Object[1];
 		objectArray[0] = objectArrayTemp;
-
+		
 		String arrayType = ((Object[]) objectArray[0])[0].getClass().getName();
 		int maxLength = ((Object[]) ((Object[]) objectArray[0])).length;
 		String columnHeader = "Value";
@@ -492,14 +579,19 @@ public class FijiToolsForHCSplugin implements MacroExtension, Command {
             // invoke the plugin
             ij.command().run(FijiToolsForHCSplugin.class, true);
         }*/
-    	
- /*	   String[] myArray1 = {"A","B","C"}; 
- 	   String[] myArray2 = {"1","2","3"};
- 	   Double[] myArray3 = {1.0,2.0,3.0};
- 	   System.out.println("main is running...");
- 	   showArray("some letters (1-10)", myArray1);
-	   showArray("some numbers (rows)", myArray3);
-	   showArray("Arrays", myArray2);
+
+/*    	String path = "C:\\Users\\stoeter\\Desktop\\AZ\\";
+    	String[] stringArrayFromFunction = getFileListSubfolder(path); 
+		IJ.log(stringArrayFromFunction.length + " files found in selected folder and subfolders.");
+		showArray("File List", stringArrayFromFunction);
+ */   	
+ /*	    String[] myArray1 = {"A","B","C"}; 
+ 	    String[] myArray2 = {"1","2","3"};
+ 	    Double[] myArray3 = {1.0,2.0,3.0};
+ 	    System.out.println("main is running...");
+ 	    showArray("some letters (1-10)", myArray1);
+	    showArray("some numbers (rows)", myArray3);
+	    showArray("Arrays", myArray2);
 */    	
 /*    	String[] stringArrayForQuery = {"171020-dyes-10x_G03_T0001F005L01A01Z01C01.tif","171020-dyes-10x_G04_T0001F004L01A01Z01C02.tif","171020-dyes-10x_H05_T0001F003L01A01Z01C04.tif"}; 
 		String regexPattern = "(.*)_([A-P][0-9]{2})_(T[0-9]{4})(F[0-9]{3})(L[0-9]{2})(A[0-9]{2})(Z[0-9]{2})(C[0-9]{2}).tif$";
